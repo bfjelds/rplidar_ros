@@ -32,9 +32,10 @@
  *
  */
 
-#include "ros/ros.h"
-#include "sensor_msgs/LaserScan.h"
-#include "std_srvs/Empty.h"
+#include "ros/time.h"
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/Laser_Scan.hpp"
+#include "std_srvs/srv/Empty.hpp"
 #include "rplidar.h"
 
 #ifndef _countof
@@ -43,11 +44,17 @@
 
 #define DEG2RAD(x) ((x)*M_PI/180.)
 
+ // for M_PI
+#define _USE_MATH_DEFINES // for C  
+#include <math.h>  
+
+#define ROS_DEBUG(...)
+
 using namespace rp::standalone::rplidar;
 
 RPlidarDriver * drv = NULL;
 
-void publish_scan(ros::Publisher *pub,
+void publish_scan(rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr pub,
                   rplidar_response_measurement_node_t *nodes,
                   size_t node_count, ros::Time start,
                   double scan_time, bool inverted,
@@ -55,9 +62,10 @@ void publish_scan(ros::Publisher *pub,
                   std::string frame_id)
 {
     static int scan_count = 0;
-    sensor_msgs::LaserScan scan_msg;
+    sensor_msgs::msg::LaserScan scan_msg;
 
-    scan_msg.header.stamp = start;
+    scan_msg.header.stamp.set__sec(start.sec);
+    scan_msg.header.stamp.set__nanosec(start.nsec);
     scan_msg.header.frame_id = frame_id;
     scan_count++;
 
@@ -157,8 +165,9 @@ bool checkRPLIDARHealth(RPlidarDriver * drv)
     }
 }
 
-bool stop_motor(std_srvs::Empty::Request &req,
-                               std_srvs::Empty::Response &res)
+static bool stop_motor(
+  std_srvs::srv::Empty::Request::SharedPtr req,
+  std_srvs::srv::Empty::Response::SharedPtr res)
 {
   if(!drv)
        return false;
@@ -169,8 +178,9 @@ bool stop_motor(std_srvs::Empty::Request &req,
   return true;
 }
 
-bool start_motor(std_srvs::Empty::Request &req,
-                               std_srvs::Empty::Response &res)
+static bool start_motor(
+  std_srvs::srv::Empty::Request::SharedPtr req,
+  std_srvs::srv::Empty::Response::SharedPtr res)
 {
   if(!drv)
        return false;
@@ -181,7 +191,7 @@ bool start_motor(std_srvs::Empty::Request &req,
 }
 
 int main(int argc, char * argv[]) {
-    ros::init(argc, argv, "rplidar_node");
+    rclcpp::init(argc, argv);
 
     std::string serial_port;
     int serial_baudrate = 115200;
@@ -189,17 +199,18 @@ int main(int argc, char * argv[]) {
     bool inverted = false;
     bool angle_compensate = true;
 
-    ros::NodeHandle nh;
-    ros::Publisher scan_pub = nh.advertise<sensor_msgs::LaserScan>("scan", 1000);
-    ros::NodeHandle nh_private("~");
-    nh_private.param<std::string>("serial_port", serial_port, "/dev/ttyUSB0"); 
-    nh_private.param<int>("serial_baudrate", serial_baudrate, 115200); 
-    nh_private.param<std::string>("frame_id", frame_id, "laser_frame");
-    nh_private.param<bool>("inverted", inverted, false);
-    nh_private.param<bool>("angle_compensate", angle_compensate, true);
+    rclcpp::Node::SharedPtr nh(rclcpp::Node::make_shared("rplidar_node"));
+    rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub = 
+      nh->create_publisher<sensor_msgs::msg::LaserScan>("scan", 1000);
+    
+    rclcpp::Node::SharedPtr nh_private(rclcpp::Node::make_shared("~"));
+    nh_private->get_parameter_or<std::string>("serial_port", serial_port, "/dev/ttyUSB0"); 
+    nh_private->get_parameter_or<int>("serial_baudrate", serial_baudrate, 115200);
+    nh_private->get_parameter_or<std::string>("frame_id", frame_id, "laser_frame");
+    nh_private->get_parameter_or<bool>("inverted", inverted, false);
+    nh_private->get_parameter_or<bool>("angle_compensate", angle_compensate, true);
 
-    printf("RPLIDAR running on ROS package rplidar_ros\n"
-           "SDK Version: "RPLIDAR_SDK_VERSION"\n");
+    printf("RPLIDAR running on ROS package rplidar_ros\n" "SDK Version: " RPLIDAR_SDK_VERSION "\n");
 
     u_result     op_result;
 
@@ -230,8 +241,10 @@ int main(int argc, char * argv[]) {
         return -1;
     }
 
-    ros::ServiceServer stop_motor_service = nh.advertiseService("stop_motor", stop_motor);
-    ros::ServiceServer start_motor_service = nh.advertiseService("start_motor", start_motor);
+    rclcpp::service::Service<std_srvs::srv::Empty>::SharedPtr stop_motor_service = 
+        nh->create_service<std_srvs::srv::Empty>("stop_motor", stop_motor);
+    rclcpp::service::Service<std_srvs::srv::Empty>::SharedPtr start_motor_service = 
+        nh->create_service<std_srvs::srv::Empty>("start_motor", start_motor);
 
     drv->startMotor();
     drv->startScan();
@@ -239,7 +252,7 @@ int main(int argc, char * argv[]) {
     ros::Time start_scan_time;
     ros::Time end_scan_time;
     double scan_duration;
-    while (ros::ok()) {
+    while (rclcpp::ok()) {
 
         rplidar_response_measurement_node_t nodes[360*2];
         size_t   count = _countof(nodes);
@@ -273,7 +286,7 @@ int main(int argc, char * argv[]) {
                         }
                     }
   
-                    publish_scan(&scan_pub, angle_compensate_nodes, angle_compensate_nodes_count,
+                    publish_scan(scan_pub, angle_compensate_nodes, angle_compensate_nodes_count,
                              start_scan_time, scan_duration, inverted,
                              angle_min, angle_max,
                              frame_id);
@@ -290,7 +303,7 @@ int main(int argc, char * argv[]) {
                     angle_min = DEG2RAD((float)(nodes[start_node].angle_q6_checkbit >> RPLIDAR_RESP_MEASUREMENT_ANGLE_SHIFT)/64.0f);
                     angle_max = DEG2RAD((float)(nodes[end_node].angle_q6_checkbit >> RPLIDAR_RESP_MEASUREMENT_ANGLE_SHIFT)/64.0f);
 
-                    publish_scan(&scan_pub, &nodes[start_node], end_node-start_node +1,
+                    publish_scan(scan_pub, &nodes[start_node], end_node-start_node +1,
                              start_scan_time, scan_duration, inverted,
                              angle_min, angle_max,
                              frame_id);
@@ -300,14 +313,14 @@ int main(int argc, char * argv[]) {
                 float angle_min = DEG2RAD(0.0f);
                 float angle_max = DEG2RAD(359.0f);
 
-                publish_scan(&scan_pub, nodes, count,
+                publish_scan(scan_pub, nodes, count,
                              start_scan_time, scan_duration, inverted,
                              angle_min, angle_max,
                              frame_id);
             }
         }
 
-        ros::spinOnce();
+        rclcpp::spin(nh);
     }
 
     // done!

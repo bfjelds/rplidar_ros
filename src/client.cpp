@@ -34,13 +34,19 @@
  * 
  */
 
+#include "rclcpp/rclcpp.hpp"
 
-#include "ros/ros.h"
-#include "sensor_msgs/LaserScan.h"
+#include "sensor_msgs/msg/Laser_Scan.hpp"
+
+#define ROS_INFO(...)
+
+// for M_PI
+#define _USE_MATH_DEFINES // for C  
+#include <math.h>  
 
 #define RAD2DEG(x) ((x)*180./M_PI)
 
-void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
+static void scanCallback(const sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
 {
     int count = scan->scan_time / scan->time_increment;
     ROS_INFO("I heard a laser scan %s[%d]:", scan->header.frame_id.c_str(), count);
@@ -54,12 +60,16 @@ void scanCallback(const sensor_msgs::LaserScan::ConstPtr& scan)
 
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "rplidar_node_client");
-    ros::NodeHandle n;
+    rclcpp::init(argc, argv);
+    rclcpp::Node::SharedPtr n(rclcpp::Node::make_shared("rplidar_node_client"));
 
-    ros::Subscriber sub = n.subscribe<sensor_msgs::LaserScan>("/scan", 1000, scanCallback);
+    rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr sub =
+      n->create_subscription<sensor_msgs::msg::LaserScan>(
+        "/scan", 1000, scanCallback
+        //"/scan", scanCallback, rmw_qos_profile_sensor_data
+        );
 
-    ros::spin();
+    rclcpp::spin(n);
 
     return 0;
 }
