@@ -241,9 +241,9 @@ int main(int argc, char * argv[]) {
         return -1;
     }
 
-    rclcpp::service::Service<std_srvs::srv::Empty>::SharedPtr stop_motor_service = 
+    rclcpp::Service<std_srvs::srv::Empty>::SharedPtr stop_motor_service = 
         nh->create_service<std_srvs::srv::Empty>("stop_motor", stop_motor);
-    rclcpp::service::Service<std_srvs::srv::Empty>::SharedPtr start_motor_service = 
+    rclcpp::Service<std_srvs::srv::Empty>::SharedPtr start_motor_service = 
         nh->create_service<std_srvs::srv::Empty>("start_motor", start_motor);
 
     drv->startMotor();
