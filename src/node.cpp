@@ -191,6 +191,7 @@ static bool start_motor(
 }
 
 int main(int argc, char * argv[]) {
+    ros::Time::init();
     rclcpp::init(argc, argv);
 
     std::string serial_port;
@@ -203,12 +204,12 @@ int main(int argc, char * argv[]) {
     rclcpp::Publisher<sensor_msgs::msg::LaserScan>::SharedPtr scan_pub = 
       nh->create_publisher<sensor_msgs::msg::LaserScan>("scan", 1000);
     
-    rclcpp::Node::SharedPtr nh_private(rclcpp::Node::make_shared("~"));
-    nh_private->get_parameter_or<std::string>("serial_port", serial_port, "/dev/ttyUSB0"); 
-    nh_private->get_parameter_or<int>("serial_baudrate", serial_baudrate, 115200);
-    nh_private->get_parameter_or<std::string>("frame_id", frame_id, "laser_frame");
-    nh_private->get_parameter_or<bool>("inverted", inverted, false);
-    nh_private->get_parameter_or<bool>("angle_compensate", angle_compensate, true);
+    // Specify "\\\\.\\COM3"
+    nh->get_parameter_or<std::string>("serial_port", serial_port, "\\\\.\\COM3");
+    nh->get_parameter_or<int>("serial_baudrate", serial_baudrate, 115200);
+    nh->get_parameter_or<std::string>("frame_id", frame_id, "laser_frame");
+    nh->get_parameter_or<bool>("inverted", inverted, false);
+    nh->get_parameter_or<bool>("angle_compensate", angle_compensate, true);
 
     printf("RPLIDAR running on ROS package rplidar_ros\n" "SDK Version: " RPLIDAR_SDK_VERSION "\n");
 
@@ -320,7 +321,7 @@ int main(int argc, char * argv[]) {
             }
         }
 
-        rclcpp::spin(nh);
+        rclcpp::spin_some(nh);
     }
 
     // done!
